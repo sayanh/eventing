@@ -139,7 +139,7 @@ type config struct {
 	ServingReadinessProbe        string `split_words:"true" required:"true"`
 }
 
-func initConfig(env config) {
+func initConfig(env config, reporterReportingPeriod int64) {
 	userTargetAddress = "127.0.0.1:" + strconv.Itoa(env.UserPort)
 	if env.VarLogVolumeName == "" && env.EnableVarLogCollection {
 		logger.Fatal("VAR_LOG_VOLUME_NAME must be specified when ENABLE_VAR_LOG_COLLECTION is true")
@@ -150,7 +150,7 @@ func initConfig(env config) {
 
 	// TODO(mattmoor): Move this key to be in terms of the KPA.
 	servingRevisionKey = autoscaler.NewMetricKey(env.ServingNamespace, env.ServingRevision)
-	_psr, err := queue.NewPrometheusStatsReporter(env.ServingNamespace, env.ServingConfiguration, env.ServingRevision, env.ServingPod)
+	_psr, err := queue.NewPrometheusStatsReporter(env.ServingNamespace, env.ServingConfiguration, env.ServingRevision, env.ServingPod, reporterReportingPeriod)
 	if err != nil {
 		logger.Fatalw("Failed to create stats reporter", zap.Error(err))
 	}
@@ -276,6 +276,8 @@ func probeQueueHealthPath(port int, timeoutSeconds int) error {
 }
 
 func main() {
+	reporterReportingPeriod := flag.Int64("reportingperiod", 1, "specify only integers greater than 1 if ReporterReportingPeriod is not 1 second")
+	fmt.Println(strconv.FormatInt(*reporterReportingPeriod, 10))
 	flag.Parse()
 
 	if *readinessProbeTimeout >= 0 {
@@ -297,7 +299,7 @@ func main() {
 	logger = logger.Named("queueproxy")
 	defer flush(logger)
 
-	initConfig(env)
+	initConfig(env, *reporterReportingPeriod)
 	logger = logger.With(
 		zap.String(logkey.Key, servingRevisionKey),
 		zap.String(logkey.Pod, env.ServingPod))
@@ -333,7 +335,7 @@ func main() {
 	defer close(statChan)
 	go reportStats(statChan)
 
-	reportTicker := time.NewTicker(queue.ReporterReportingPeriod)
+	reportTicker := time.NewTicker(time.Duration(*reporterReportingPeriod) * time.Second)
 	defer reportTicker.Stop()
 	queue.NewStats(env.ServingPod, queue.Channels{
 		ReqChan:    reqChan,
