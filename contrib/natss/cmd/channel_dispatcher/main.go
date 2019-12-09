@@ -19,6 +19,8 @@ package main
 import (
 	"flag"
 	"log"
+	"net/http"
+	"net/http/pprof"
 
 	"github.com/knative/eventing/pkg/tracing"
 
@@ -120,12 +122,27 @@ func main() {
 	); err != nil {
 		logger.Fatalf("Failed to start informers: %v", err)
 	}
+	go func() {
+		logger.Info("Starting debug server")
+		r := http.NewServeMux()
+		r.HandleFunc("/", hiHandler)
+		r.HandleFunc("/debug/pprof/", pprof.Index)
+		r.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		r.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		r.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+		r.HandleFunc("/debug/pprof/trace", pprof.Trace)
+		log.Println(http.ListenAndServe(":6060", nil))
+	}()
 
 	logger.Info("Starting dispatcher.")
 	go natssDispatcher.Start(stopCh)
 
 	logger.Info("Starting controllers.")
 	kncontroller.StartAll(stopCh, controllers[:]...)
+}
+
+func hiHandler(w http.ResponseWriter, r *http.Request) {
+    w.Write([]byte("hi"))
 }
 
 func setupLogger() (*zap.SugaredLogger, zap.AtomicLevel) {

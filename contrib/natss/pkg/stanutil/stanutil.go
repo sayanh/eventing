@@ -71,7 +71,7 @@ func Publish(sc *stan.Conn, subj string, msg *[]byte, logger *zap.SugaredLogger)
 	}
 	err = (*sc).Publish(subj, *msg)
 	if err != nil {
-		logger.Errorf("Error during publish: %v\n", err)
+		logger.Errorf("Error during publish: %v msg: %v subj: %v\n", err, msg, subj)
 	}
 	return
 }

@@ -266,18 +266,31 @@ func (s *SubscriptionsSupervisor) subscribe(channel provisioners.ChannelReferenc
 
 	mcb := func(msg *stan.Msg) {
 		message := provisioners.Message{}
+		dLog := []zap.Field{
+			zap.String("subject", msg.Subject),
+			zap.Uint64("sequence", msg.Sequence),
+			zap.Int64("timestamp", msg.Timestamp),
+			zap.String("SubscriberURI", subscription.SubscriberURI),
+		}
 		if err := json.Unmarshal(msg.Data, &message); err != nil {
-			s.logger.Error("Failed to unmarshal message: ", zap.Error(err))
+			dErr := append(dLog,zap.Error(err) )
+			s.logger.Error("Failed to unmarshal message", dErr...)
 			return
 		}
-		s.logger.Sugar().Debugf("NATSS message received from subject: %v; sequence: %v; timestamp: %v, headers: '%s'", msg.Subject, msg.Sequence, msg.Timestamp, message.Headers)
+		dLog = append(dLog, zap.String("headers", fmt.Sprintf("%v", message.Headers)))
+		s.logger.Debug("NATSS message received from subject", dLog...)
 		if err := s.dispatcher.DispatchMessage(&message, subscription.SubscriberURI, subscription.ReplyURI, provisioners.DispatchDefaults{Namespace: channel.Namespace}); err != nil {
-			s.logger.Error("Failed to dispatch message: ", zap.Error(err))
+			dErr := append(dLog,zap.Error(err) )
+			s.logger.Error("Failed to dispatch message", dErr...)
 			return
 		}
-		if err := msg.Ack(); err != nil {
-			s.logger.Error("Failed to acknowledge message: ", zap.Error(err))
+		err := msg.Ack()
+		if err != nil {
+			dErr := append(dLog,zap.Error(err))
+			s.logger.Error("Failed to acknowledge message", dErr...)
+			return
 		}
+		s.logger.Debug("Successfully acknowledged message", dLog...)
 	}
 	// subscribe to a NATSS subject
 	ch := getSubject(channel)

@@ -1,0 +1,1 @@
+defaultBaseImage: docker.io/shazra/alpine-curl
